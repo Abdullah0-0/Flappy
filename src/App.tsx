@@ -11,6 +11,7 @@ import {
   Check,
   RotateCcw,
   Zap,
+  Mic,
 } from 'lucide-react';
 import {
   CHARACTERS,
@@ -20,6 +21,8 @@ import {
   GameState,
   RunRecord,
   ThemeMode,
+  VOICE_AUDIOS,
+  VoiceAudioId,
   getMedalForScore,
 } from './types/game';
 import { GameCanvas } from './components/GameCanvas';
@@ -31,6 +34,7 @@ const STORAGE_KEYS = {
   THEME: 'flappy_custom_theme_v1',
   DIFFICULTY: 'flappy_custom_difficulty_v1',
   VOICE_SPEED: 'flappy_custom_voice_speed_v1',
+  VOICE_AUDIO: 'flappy_custom_voice_audio_v1',
   BEST_SCORES: 'flappy_custom_best_scores_v1',
   RUN_HISTORY: 'flappy_custom_runs_v1',
 };
@@ -46,7 +50,13 @@ export default function App() {
   const [gameState, setGameState] = useState<GameState>('TITLE_MENU');
   const [characterId, setCharacterId] = useState<CharacterId>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.CHARACTER);
-    return saved === 'side_profile' ? 'side_profile' : 'rose_crown';
+    if (saved && saved in CHARACTERS) return saved as CharacterId;
+    return 'glasses_side';
+  });
+  const [voiceAudioId, setVoiceAudioId] = useState<VoiceAudioId>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.VOICE_AUDIO);
+    if (saved === 'khizu' || saved === 'saad_2') return saved;
+    return 'saad_1'; // Default audio
   });
   const [theme, setTheme] = useState<ThemeMode>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.THEME);
@@ -94,6 +104,11 @@ export default function App() {
   }, [characterId]);
 
   useEffect(() => {
+    soundEngine.setVoiceAudio(voiceAudioId);
+    localStorage.setItem(STORAGE_KEYS.VOICE_AUDIO, voiceAudioId);
+  }, [voiceAudioId]);
+
+  useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.THEME, theme);
   }, [theme]);
 
@@ -113,6 +128,16 @@ export default function App() {
   };
 
   const handleTestJumpAudio = () => {
+    if (isMuted) {
+      setIsMuted(false);
+      soundEngine.setMuted(false);
+    }
+    soundEngine.playJumpSound();
+  };
+
+  const handleChangeVoiceAudio = (id: VoiceAudioId) => {
+    setVoiceAudioId(id);
+    soundEngine.setVoiceAudio(id);
     if (isMuted) {
       setIsMuted(false);
       soundEngine.setMuted(false);
@@ -172,6 +197,7 @@ export default function App() {
         id: `${Date.now()}`,
         score: finalScore,
         characterId,
+        voiceAudioId,
         difficulty,
         theme,
         medal: getMedalForScore(finalScore),
@@ -184,7 +210,7 @@ export default function App() {
         return next;
       });
     },
-    [characterId, difficulty, theme]
+    [characterId, difficulty, theme, voiceAudioId]
   );
 
   const handleClearBestScores = () => {
@@ -198,11 +224,12 @@ export default function App() {
   const activeBestScore = bestScores[difficulty] || 0;
   const activeCharacter = CHARACTERS[characterId];
   const activeDifficulty = DIFFICULTIES[difficulty];
+  const activeVoice = VOICE_AUDIOS[voiceAudioId];
 
   return (
     <div className="min-h-dvh w-full bg-[#0B1120] text-slate-100 flex flex-col">
       {/* Desktop Top Bar (3-zone contract) */}
-      <header className="hidden lg:flex items-center justify-between gap-8 px-8 py-3.5 border-b border-slate-800/80 bg-slate-950/70 backdrop-blur-md">
+      <header className="hidden lg:flex items-center justify-between gap-6 px-8 py-3.5 border-b border-slate-800/80 bg-slate-950/70 backdrop-blur-md">
         <a
           href="#arcade"
           onClick={(e) => {
@@ -232,6 +259,23 @@ export default function App() {
             );
           })}
           <span className="text-slate-600">|</span>
+          <div className="flex items-center gap-1.5 bg-slate-900 px-2 py-1 rounded-lg border border-slate-800">
+            {(Object.keys(VOICE_AUDIOS) as VoiceAudioId[]).map((vId) => (
+              <button
+                key={vId}
+                type="button"
+                onClick={() => handleChangeVoiceAudio(vId)}
+                className={`px-2 py-0.5 rounded text-xs transition-colors cursor-pointer ${
+                  voiceAudioId === vId
+                    ? 'bg-amber-400 text-slate-950 font-bold'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {VOICE_AUDIOS[vId].name}
+              </button>
+            ))}
+          </div>
+          <span className="text-slate-600">|</span>
           <button
             type="button"
             onClick={() => setTheme(theme === 'day' ? 'night' : 'day')}
@@ -244,7 +288,7 @@ export default function App() {
             onClick={handleTestJumpAudio}
             className="hover:text-white transition-colors whitespace-nowrap shrink-0 cursor-pointer text-amber-300"
           >
-            Voice ({voiceSpeed}x)
+            Play ({activeVoice.name})
           </button>
         </nav>
 
@@ -292,7 +336,7 @@ export default function App() {
                     {activeCharacter.name}
                   </div>
                   <div className="text-[11px] text-amber-300 font-mono-num">
-                    {activeDifficulty.label} · {voiceSpeed}x Voice
+                    {activeDifficulty.label} · {activeVoice.name}
                   </div>
                 </div>
               </div>
@@ -315,7 +359,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setIsMobileCustomizeOpen(true)}
-                  aria-label="Customize Character and Theme"
+                  aria-label="Customize Character, Audio and Theme"
                   className="lg:hidden min-h-[44px] px-3 rounded-xl bg-slate-950/65 hover:bg-slate-900/90 backdrop-blur-md border border-white/15 text-white flex items-center gap-1.5 text-xs font-bold active:scale-95 transition-transform cursor-pointer"
                 >
                   <SlidersHorizontal className="w-4 h-4 text-amber-400 shrink-0" />
@@ -341,83 +385,111 @@ export default function App() {
                     GET READY!
                   </p>
                   <p className="mt-0.5 text-xs font-semibold text-white">
-                    Tap screen or press Spacebar — voice completes fast ({voiceSpeed}x) on every jump
+                    Tap screen or press Spacebar · Voice: <span className="text-amber-300 font-bold">{activeVoice.name}</span>
                   </p>
                 </div>
               </div>
             )}
 
-            {/* TITLE MENU OVERLAY (Character Picker + Voice Speed + Start Button in Mobile Thumb Zone) */}
+            {/* TITLE MENU OVERLAY */}
             {gameState === 'TITLE_MENU' && (
-              <div className="absolute inset-0 z-20 flex flex-col justify-between p-4 pt-20 pb-5 bg-gradient-to-b from-slate-950/35 via-slate-950/20 to-slate-950/85">
+              <div className="absolute inset-0 z-20 flex flex-col justify-between p-4 pt-16 pb-4 bg-gradient-to-b from-slate-950/35 via-slate-950/20 to-slate-950/85">
                 {/* Title Lockup */}
-                <div className="text-center mt-1">
-                  <h1 className="font-display text-4xl sm:text-5xl font-black text-white tracking-tight arcade-score-shadow">
+                <div className="text-center mt-0.5">
+                  <h1 className="font-display text-3xl sm:text-4xl font-black text-white tracking-tight arcade-score-shadow">
                     FLAPPY LEGEND
                   </h1>
-                  <p className="mt-1 text-xs sm:text-sm font-semibold text-amber-200 drop-shadow">
-                    Pick your custom flyer photo & tap to levitate
+                  <p className="mt-0.5 text-xs font-semibold text-amber-200 drop-shadow">
+                    Pick your custom flyer photo & jump audio
                   </p>
                 </div>
 
-                {/* Bottom Natural Thumb-Zone Character Selection & Start CTA */}
-                <div className="w-full max-w-[355px] mx-auto space-y-2.5 bg-slate-950/85 backdrop-blur-md p-3.5 rounded-2xl border border-white/15 shadow-2xl">
-                  <div className="flex items-center justify-between text-xs font-bold text-slate-300 px-1">
-                    <span>Choose Your Flyer Photo</span>
-                    <button
-                      type="button"
-                      onClick={handleTestJumpAudio}
-                      className="text-amber-400 hover:text-amber-300 flex items-center gap-1 cursor-pointer"
-                    >
-                      <Volume2 className="w-3.5 h-3.5" />
-                      <span className="whitespace-nowrap shrink-0">
-                        Test Voice ({voiceSpeed}x)
+                {/* Bottom Natural Thumb-Zone Character & Audio Selection */}
+                <div className="w-full max-w-[365px] mx-auto space-y-2 bg-slate-950/85 backdrop-blur-md p-3 rounded-2xl border border-white/15 shadow-2xl">
+                  {/* Audio Track Selector Row */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-300 px-1">
+                      <span className="flex items-center gap-1.5 text-amber-300">
+                        <Mic className="w-3.5 h-3.5" />
+                        Jump Audio Track:
                       </span>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={handleTestJumpAudio}
+                        className="text-amber-400 hover:text-amber-300 flex items-center gap-1 text-[11px] cursor-pointer"
+                      >
+                        <Volume2 className="w-3 h-3" />
+                        <span>Test ({activeVoice.name})</span>
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {(Object.keys(VOICE_AUDIOS) as VoiceAudioId[]).map((vId) => {
+                        const opt = VOICE_AUDIOS[vId];
+                        const isSelected = voiceAudioId === vId;
+                        return (
+                          <button
+                            key={vId}
+                            type="button"
+                            onClick={() => handleChangeVoiceAudio(vId)}
+                            className={`min-h-[34px] py-1 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                              isSelected
+                                ? 'bg-amber-400 text-slate-950 shadow'
+                                : 'bg-slate-900 text-slate-300 hover:text-white border border-slate-800'
+                            }`}
+                          >
+                            <span>{opt.name}</span>
+                            {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
 
-                  {/* Two Character Photo Cards */}
-                  <div className="grid grid-cols-2 gap-2.5">
-                    {(Object.keys(CHARACTERS) as CharacterId[]).map((id) => {
-                      const char = CHARACTERS[id];
-                      const selected = characterId === id;
-                      return (
-                        <button
-                          key={id}
-                          type="button"
-                          onClick={() => handleSelectCharacter(id)}
-                          className={`group relative flex flex-col items-center p-2 rounded-xl border-2 transition-all cursor-pointer ${
-                            selected
-                              ? 'bg-amber-400/15 border-amber-400 shadow-md'
-                              : 'bg-slate-900/80 border-slate-700/80 hover:border-slate-500'
-                          }`}
-                        >
-                          <div className="relative w-14 h-14 rounded-xl overflow-hidden bg-slate-800 border border-white/10">
-                            <img
-                              src={char.imageUrl}
-                              alt={char.name}
-                              referrerPolicy="no-referrer"
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                          <span className="mt-1.5 text-xs font-bold text-white whitespace-nowrap truncate max-w-full">
-                            {char.name}
-                          </span>
-                          {selected && (
-                            <span className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center">
-                              <Check className="w-3.5 h-3.5 stroke-[3]" />
+                  {/* Character Photo Cards */}
+                  <div className="space-y-1">
+                    <div className="text-xs font-bold text-slate-300 px-1">Flyer Photo</div>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {(Object.keys(CHARACTERS) as CharacterId[]).map((id) => {
+                        const char = CHARACTERS[id];
+                        const selected = characterId === id;
+                        return (
+                          <button
+                            key={id}
+                            type="button"
+                            onClick={() => handleSelectCharacter(id)}
+                            className={`group relative flex flex-col items-center p-1.5 rounded-xl border-2 transition-all cursor-pointer ${
+                              selected
+                                ? 'bg-amber-400/15 border-amber-400 shadow-md'
+                                : 'bg-slate-900/80 border-slate-700/80 hover:border-slate-500'
+                            }`}
+                          >
+                            <div className="relative w-11 h-11 rounded-lg overflow-hidden bg-slate-800 border border-white/10">
+                              <img
+                                src={char.imageUrl}
+                                alt={char.name}
+                                referrerPolicy="no-referrer"
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                            <span className="mt-1 text-[10px] font-bold text-white whitespace-nowrap truncate max-w-full">
+                              {char.name.split(' ')[0]}
                             </span>
-                          )}
-                        </button>
-                      );
-                    })}
+                            {selected && (
+                              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center">
+                                <Check className="w-3 h-3 stroke-[3]" />
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
 
-                  {/* Quick Voice Speed Selector Row */}
-                  <div className="flex items-center justify-between gap-1.5 bg-slate-900 p-1 rounded-xl border border-slate-800">
-                    <span className="text-[11px] font-bold text-slate-300 pl-2 flex items-center gap-1 whitespace-nowrap shrink-0">
-                      <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                      Voice Speed
+                  {/* Quick Voice Speed Row */}
+                  <div className="flex items-center justify-between gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800">
+                    <span className="text-[11px] font-bold text-slate-300 pl-1.5 flex items-center gap-1 whitespace-nowrap shrink-0">
+                      <Zap className="w-3 h-3 text-amber-400 shrink-0" />
+                      Speed
                     </span>
                     <div className="flex items-center gap-1">
                       {VOICE_SPEED_OPTIONS.map((opt) => (
@@ -425,7 +497,7 @@ export default function App() {
                           key={opt.rate}
                           type="button"
                           onClick={() => handleChangeVoiceSpeed(opt.rate)}
-                          className={`min-h-[32px] px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                          className={`min-h-[28px] px-2 py-0.5 rounded-md text-[11px] font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                             voiceSpeed === opt.rate
                               ? 'bg-amber-400 text-slate-950'
                               : 'text-slate-400 hover:text-white'
@@ -438,43 +510,43 @@ export default function App() {
                   </div>
 
                   {/* Quick Theme & Difficulty Row */}
-                  <div className="flex items-center justify-between gap-2">
-                    {/* Day / Night Segmented Control */}
+                  <div className="flex items-center justify-between gap-1.5">
+                    {/* Day / Night Control */}
                     <div className="flex items-center bg-slate-900 p-1 rounded-xl border border-slate-800">
                       <button
                         type="button"
                         onClick={() => setTheme('day')}
-                        className={`min-h-[36px] px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer ${
+                        className={`min-h-[32px] px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer ${
                           theme === 'day'
                             ? 'bg-sky-400 text-slate-950'
                             : 'text-slate-400 hover:text-white'
                         }`}
                       >
-                        <Sun className="w-3.5 h-3.5 shrink-0" />
+                        <Sun className="w-3 h-3 shrink-0" />
                         <span className="whitespace-nowrap shrink-0">Day</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => setTheme('night')}
-                        className={`min-h-[36px] px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer ${
+                        className={`min-h-[32px] px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer ${
                           theme === 'night'
                             ? 'bg-indigo-500 text-white'
                             : 'text-slate-400 hover:text-white'
                         }`}
                       >
-                        <Moon className="w-3.5 h-3.5 shrink-0" />
+                        <Moon className="w-3 h-3 shrink-0" />
                         <span className="whitespace-nowrap shrink-0">Night</span>
                       </button>
                     </div>
 
-                    {/* Difficulty Segmented Control */}
+                    {/* Difficulty Control */}
                     <div className="flex-1 flex items-center justify-end bg-slate-900 p-1 rounded-xl border border-slate-800">
                       {(['chill', 'classic', 'turbo'] as DifficultyPreset[]).map((preset) => (
                         <button
                           key={preset}
                           type="button"
                           onClick={() => setDifficulty(preset)}
-                          className={`flex-1 min-h-[36px] px-2 py-1 rounded-lg text-xs font-bold capitalize transition-colors cursor-pointer ${
+                          className={`flex-1 min-h-[32px] px-1.5 py-0.5 rounded-lg text-xs font-bold capitalize transition-colors cursor-pointer ${
                             difficulty === preset
                               ? 'bg-amber-400 text-slate-950'
                               : 'text-slate-400 hover:text-white'
@@ -486,13 +558,13 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Primary Start Button (>= 48px touch target) */}
+                  {/* Primary Start Button */}
                   <button
                     type="button"
                     onClick={handleEnterReady}
-                    className="w-full min-h-[52px] py-3 px-6 rounded-xl bg-[#73BF2E] hover:bg-[#65AD24] active:scale-[0.98] border-b-4 border-[#4A8019] text-white font-display font-black text-lg tracking-wide flex items-center justify-center gap-2 shadow-lg transition-transform cursor-pointer"
+                    className="w-full min-h-[48px] py-2.5 px-6 rounded-xl bg-[#73BF2E] hover:bg-[#65AD24] active:scale-[0.98] border-b-4 border-[#4A8019] text-white font-display font-black text-base tracking-wide flex items-center justify-center gap-2 shadow-lg transition-transform cursor-pointer"
                   >
-                    <Play className="w-5 h-5 fill-current shrink-0" />
+                    <Play className="w-4 h-4 fill-current shrink-0" />
                     <span className="whitespace-nowrap shrink-0">START GAME</span>
                   </button>
                 </div>
@@ -518,70 +590,100 @@ export default function App() {
         </section>
 
         {/* Right Column (Desktop Customization Studio & High Score Locker) */}
-        <aside className="hidden lg:flex lg:col-span-6 flex-col justify-between space-y-6">
-          {/* Card 1: Character & Voice Audio Customizer */}
-          <div className="rounded-2xl bg-slate-900/90 border border-slate-800 p-6 shadow-xl">
+        <aside className="hidden lg:flex lg:col-span-6 flex-col justify-between space-y-5">
+          {/* Card 1: Character & Audio Track Studio */}
+          <div className="rounded-2xl bg-slate-900/90 border border-slate-800 p-5 shadow-xl space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="font-display text-2xl font-extrabold text-white">
-                  01. Flyer & Jump Voice Studio
+                <h2 className="font-display text-xl font-extrabold text-white">
+                  01. Voice Audio & Flyer Studio
                 </h2>
-                <p className="text-sm text-slate-400 mt-0.5">
-                  Silence is trimmed automatically and voice playback is sped up so the full clip finishes cleanly before your next jump.
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Pick your jump voice audio clip (khizu, saad 1, saad 2) and character flyer.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={handleTestJumpAudio}
-                className="px-4 py-2.5 rounded-xl bg-amber-400/15 hover:bg-amber-400/25 border border-amber-400/40 text-amber-300 text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer shrink-0"
+                className="px-3.5 py-2 rounded-xl bg-amber-400/15 hover:bg-amber-400/25 border border-amber-400/40 text-amber-300 text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer shrink-0"
               >
                 <Volume2 className="w-4 h-4 shrink-0" />
-                <span className="whitespace-nowrap shrink-0">Test Voice ({voiceSpeed}x)</span>
+                <span className="whitespace-nowrap shrink-0">Test {activeVoice.name}</span>
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 mt-5">
-              {(Object.keys(CHARACTERS) as CharacterId[]).map((id) => {
-                const char = CHARACTERS[id];
-                const isSelected = characterId === id;
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => handleSelectCharacter(id)}
-                    className={`text-left p-4 rounded-xl border-2 transition-all flex items-center gap-4 cursor-pointer ${
-                      isSelected
-                        ? 'bg-amber-400/10 border-amber-400'
-                        : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
-                    }`}
-                  >
-                    <img
-                      src={char.imageUrl}
-                      alt={char.name}
-                      referrerPolicy="no-referrer"
-                      className="w-16 h-16 rounded-xl object-cover border border-white/15 shrink-0 bg-slate-800"
-                    />
-                    <div className="min-w-0">
-                      <div className="font-display font-bold text-base text-white truncate">
+            {/* Audio Track Selector */}
+            <div>
+              <div className="text-xs font-bold text-slate-300 mb-2 flex items-center gap-1.5">
+                <Mic className="w-4 h-4 text-amber-400" />
+                <span>Jump Audio Recording:</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2.5">
+                {(Object.keys(VOICE_AUDIOS) as VoiceAudioId[]).map((vId) => {
+                  const opt = VOICE_AUDIOS[vId];
+                  const isSelected = voiceAudioId === vId;
+                  return (
+                    <button
+                      key={vId}
+                      type="button"
+                      onClick={() => handleChangeVoiceAudio(vId)}
+                      className={`p-3 rounded-xl border-2 text-left transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-amber-400/15 border-amber-400 text-white shadow'
+                          : 'bg-slate-950/70 border-slate-800 text-slate-400 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-white text-sm">{opt.name}</span>
+                        {isSelected && <Check className="w-4 h-4 text-amber-400" />}
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-1 line-clamp-1">
+                        {opt.description}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Flyer Character Grid */}
+            <div>
+              <div className="text-xs font-bold text-slate-300 mb-2">Select Flyer:</div>
+              <div className="grid grid-cols-4 gap-2.5">
+                {(Object.keys(CHARACTERS) as CharacterId[]).map((id) => {
+                  const char = CHARACTERS[id];
+                  const isSelected = characterId === id;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => handleSelectCharacter(id)}
+                      className={`p-2.5 rounded-xl border-2 transition-all flex flex-col items-center text-center cursor-pointer ${
+                        isSelected
+                          ? 'bg-amber-400/10 border-amber-400'
+                          : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      <img
+                        src={char.imageUrl}
+                        alt={char.name}
+                        referrerPolicy="no-referrer"
+                        className="w-12 h-12 rounded-lg object-cover border border-white/15 bg-slate-800"
+                      />
+                      <div className="font-display font-bold text-xs text-white truncate max-w-full mt-1.5">
                         {char.name}
                       </div>
-                      <p className="text-xs text-slate-400 line-clamp-2 mt-0.5">
-                        {char.tagline}
-                      </p>
-                      <div className="mt-2 text-xs font-bold text-amber-400">
-                        {isSelected ? 'Active Flyer' : 'Click to Equip'}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Voice Speed Controls */}
-            <div className="mt-5 pt-4 border-t border-slate-800 flex items-center justify-between gap-4">
+            <div className="pt-3 border-t border-slate-800 flex items-center justify-between gap-4">
               <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
                 <Zap className="w-4 h-4 text-amber-400 shrink-0" />
-                <span>Jump Voice Playback Speed:</span>
+                <span>Jump Voice Speed:</span>
               </div>
               <div className="flex items-center gap-2">
                 {VOICE_SPEED_OPTIONS.map((opt) => (
@@ -589,7 +691,7 @@ export default function App() {
                     key={opt.rate}
                     type="button"
                     onClick={() => handleChangeVoiceSpeed(opt.rate)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                       voiceSpeed === opt.rate
                         ? 'bg-amber-400 text-slate-950'
                         : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-white'
@@ -602,20 +704,17 @@ export default function App() {
             </div>
           </div>
 
-          {/* Card 2: Environment & Physics Presets */}
-          <div className="rounded-2xl bg-slate-900/90 border border-slate-800 p-6 shadow-xl">
-            <h2 className="font-display text-2xl font-extrabold text-white">
+          {/* Card 2: Sky Theme & Physics Presets */}
+          <div className="rounded-2xl bg-slate-900/90 border border-slate-800 p-5 shadow-xl">
+            <h2 className="font-display text-xl font-extrabold text-white">
               02. Sky Theme & Physics Tuning
             </h2>
-            <p className="text-sm text-slate-400 mt-0.5">
-              Customize background time-of-day and pipe gap difficulty.
-            </p>
 
-            <div className="grid grid-cols-2 gap-3 mt-4">
+            <div className="grid grid-cols-2 gap-3 mt-3">
               <button
                 type="button"
                 onClick={() => setTheme('day')}
-                className={`p-3.5 rounded-xl border flex items-center gap-3 transition-colors cursor-pointer ${
+                className={`p-3 rounded-xl border flex items-center gap-3 transition-colors cursor-pointer ${
                   theme === 'day'
                     ? 'bg-sky-500/15 border-sky-400 text-white'
                     : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-white'
@@ -624,14 +723,14 @@ export default function App() {
                 <Sun className="w-5 h-5 text-amber-400 shrink-0" />
                 <div className="text-left">
                   <div className="text-sm font-bold">Classic Daylight Sky</div>
-                  <div className="text-xs text-slate-400">Turquoise horizon & clouds</div>
+                  <div className="text-xs text-slate-400">Turquoise horizon</div>
                 </div>
               </button>
 
               <button
                 type="button"
                 onClick={() => setTheme('night')}
-                className={`p-3.5 rounded-xl border flex items-center gap-3 transition-colors cursor-pointer ${
+                className={`p-3 rounded-xl border flex items-center gap-3 transition-colors cursor-pointer ${
                   theme === 'night'
                     ? 'bg-indigo-500/15 border-indigo-400 text-white'
                     : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-white'
@@ -640,12 +739,12 @@ export default function App() {
                 <Moon className="w-5 h-5 text-indigo-300 shrink-0" />
                 <div className="text-left">
                   <div className="text-sm font-bold">Starry Night City</div>
-                  <div className="text-xs text-slate-400">Crescent moon & lit skyline</div>
+                  <div className="text-xs text-slate-400">Crescent moon</div>
                 </div>
               </button>
             </div>
 
-            <div className="grid grid-cols-3 gap-3 mt-4">
+            <div className="grid grid-cols-3 gap-2.5 mt-3">
               {(['chill', 'classic', 'turbo'] as DifficultyPreset[]).map((preset) => {
                 const cfg = DIFFICULTIES[preset];
                 const active = difficulty === preset;
@@ -654,7 +753,7 @@ export default function App() {
                     key={preset}
                     type="button"
                     onClick={() => setDifficulty(preset)}
-                    className={`p-3.5 rounded-xl border text-left transition-colors cursor-pointer ${
+                    className={`p-2.5 rounded-xl border text-left transition-colors cursor-pointer ${
                       active
                         ? 'bg-amber-400/15 border-amber-400 text-white'
                         : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-white'
@@ -663,22 +762,22 @@ export default function App() {
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-bold text-white">{cfg.label}</span>
                       <span className="text-xs font-mono-num text-amber-400">
-                        Best: {bestScores[preset] || 0}
+                        {bestScores[preset] || 0}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-400 mt-1">{cfg.subtitle}</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">{cfg.subtitle}</p>
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* Card 3: Recent Flight Log & Controls */}
-          <div className="rounded-2xl bg-slate-900/90 border border-slate-800 p-6 shadow-xl">
+          {/* Card 3: Recent Flight Log */}
+          <div className="rounded-2xl bg-slate-900/90 border border-slate-800 p-4 shadow-xl">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Trophy className="w-5 h-5 text-amber-400" />
-                <h2 className="font-display text-xl font-extrabold text-white">
+                <Trophy className="w-4 h-4 text-amber-400" />
+                <h2 className="font-display text-base font-extrabold text-white">
                   03. Recent Flight Records
                 </h2>
               </div>
@@ -689,36 +788,32 @@ export default function App() {
                   className="text-xs text-slate-400 hover:text-rose-400 flex items-center gap-1 transition-colors cursor-pointer"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Reset Records</span>
+                  <span>Reset</span>
                 </button>
               )}
             </div>
 
             {runHistory.length === 0 ? (
-              <p className="text-sm text-slate-400 mt-3">
-                No flights recorded in this session yet. Tap the game screen or press{' '}
-                <kbd className="px-2 py-0.5 text-xs font-mono bg-slate-800 text-slate-200 rounded border border-slate-700">
-                  Spacebar
-                </kbd>{' '}
-                to launch your first run!
+              <p className="text-xs text-slate-400 mt-2">
+                No flights recorded yet. Tap the screen or press Spacebar to play!
               </p>
             ) : (
-              <div className="mt-3 divide-y divide-slate-800/80">
-                {runHistory.slice(0, 4).map((run) => (
+              <div className="mt-2 divide-y divide-slate-800/80">
+                {runHistory.slice(0, 3).map((run) => (
                   <div
                     key={run.id}
-                    className="py-2 flex items-center justify-between text-xs text-slate-300"
+                    className="py-1.5 flex items-center justify-between text-xs text-slate-300"
                   >
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-white">
                         {CHARACTERS[run.characterId].name}
                       </span>
                       <span aria-hidden="true">·</span>
-                      <span className="capitalize">{run.difficulty}</span>
+                      <span className="text-amber-300 font-bold">{run.voiceAudioId || 'khizu'}</span>
                       <span aria-hidden="true">·</span>
-                      <span className="text-slate-400">{run.timestamp}</span>
+                      <span className="capitalize text-slate-400">{run.difficulty}</span>
                     </div>
-                    <div className="font-mono-num font-bold text-amber-400 text-sm">
+                    <div className="font-mono-num font-bold text-amber-400 text-xs">
                       {run.score} pts
                     </div>
                   </div>
@@ -732,54 +827,89 @@ export default function App() {
       {/* Mobile Bottom Sheet Customizer Drawer */}
       {isMobileCustomizeOpen && (
         <div className="fixed inset-0 z-50 lg:hidden flex flex-col justify-end bg-black/60 backdrop-blur-sm">
-          <div className="w-full rounded-t-3xl bg-slate-900 border-t border-slate-700 p-5 pb-8 space-y-4 shadow-2xl">
-            <div className="w-10 h-1.5 bg-slate-700 rounded-full mx-auto -mt-1" />
+          <div className="w-full rounded-t-3xl bg-slate-900 border-t border-slate-700 p-4 pb-7 space-y-3 shadow-2xl max-h-[85dvh] overflow-y-auto">
+            <div className="w-10 h-1.5 bg-slate-700 rounded-full mx-auto" />
 
             <div className="flex items-center justify-between">
-              <h3 className="font-display text-xl font-extrabold text-white">
-                Customize Flyer & Voice Speed
+              <h3 className="font-display text-lg font-extrabold text-white">
+                Customize Flyer & Audio
               </h3>
               <button
                 type="button"
                 onClick={() => setIsMobileCustomizeOpen(false)}
-                className="min-h-[44px] min-w-[44px] rounded-xl bg-slate-800 text-slate-300 flex items-center justify-center"
+                className="min-h-[40px] min-w-[40px] rounded-xl bg-slate-800 text-slate-300 flex items-center justify-center"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              {(Object.keys(CHARACTERS) as CharacterId[]).map((id) => {
-                const char = CHARACTERS[id];
-                const selected = characterId === id;
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => handleSelectCharacter(id)}
-                    className={`p-3 rounded-2xl border-2 flex flex-col items-center text-center ${
-                      selected
-                        ? 'bg-amber-400/15 border-amber-400'
-                        : 'bg-slate-950 border-slate-800'
-                    }`}
-                  >
-                    <img
-                      src={char.imageUrl}
-                      alt={char.name}
-                      referrerPolicy="no-referrer"
-                      className="w-16 h-16 rounded-xl object-cover"
-                    />
-                    <span className="mt-2 text-xs font-bold text-white">{char.name}</span>
-                  </button>
-                );
-              })}
+            {/* Audio Track Selector */}
+            <div>
+              <div className="text-xs font-bold text-slate-300 mb-1.5 flex items-center gap-1.5">
+                <Mic className="w-3.5 h-3.5 text-amber-400" />
+                <span>Jump Audio Track:</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {(Object.keys(VOICE_AUDIOS) as VoiceAudioId[]).map((vId) => {
+                  const opt = VOICE_AUDIOS[vId];
+                  const isSelected = voiceAudioId === vId;
+                  return (
+                    <button
+                      key={vId}
+                      type="button"
+                      onClick={() => handleChangeVoiceAudio(vId)}
+                      className={`min-h-[42px] px-2 py-1.5 rounded-xl border-2 font-bold text-xs flex items-center justify-center gap-1 ${
+                        isSelected
+                          ? 'bg-amber-400 text-slate-950 border-amber-300'
+                          : 'bg-slate-950 text-slate-300 border-slate-800'
+                      }`}
+                    >
+                      <span>{opt.name}</span>
+                      {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Flyer Character Grid */}
+            <div>
+              <div className="text-xs font-bold text-slate-300 mb-1.5">Select Flyer:</div>
+              <div className="grid grid-cols-4 gap-2">
+                {(Object.keys(CHARACTERS) as CharacterId[]).map((id) => {
+                  const char = CHARACTERS[id];
+                  const selected = characterId === id;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => handleSelectCharacter(id)}
+                      className={`p-1.5 rounded-xl border-2 flex flex-col items-center text-center ${
+                        selected
+                          ? 'bg-amber-400/15 border-amber-400'
+                          : 'bg-slate-950 border-slate-800'
+                      }`}
+                    >
+                      <img
+                        src={char.imageUrl}
+                        alt={char.name}
+                        referrerPolicy="no-referrer"
+                        className="w-12 h-12 rounded-lg object-cover"
+                      />
+                      <span className="mt-1 text-[10px] font-bold text-white truncate max-w-full">
+                        {char.name.split(' ')[0]}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Mobile Voice Speed Selector */}
             <div>
-              <div className="text-xs font-bold text-slate-400 mb-1.5 flex items-center gap-1.5">
+              <div className="text-xs font-bold text-slate-400 mb-1 flex items-center gap-1.5">
                 <Zap className="w-3.5 h-3.5 text-amber-400" />
-                <span>Jump Voice Speed</span>
+                <span>Jump Voice Speed:</span>
               </div>
               <div className="grid grid-cols-4 gap-1.5">
                 {VOICE_SPEED_OPTIONS.map((opt) => (
@@ -787,7 +917,7 @@ export default function App() {
                     key={opt.rate}
                     type="button"
                     onClick={() => handleChangeVoiceSpeed(opt.rate)}
-                    className={`min-h-[44px] rounded-xl border font-bold text-xs ${
+                    className={`min-h-[38px] rounded-xl border font-bold text-xs ${
                       voiceSpeed === opt.rate
                         ? 'bg-amber-400 text-slate-950 border-amber-300'
                         : 'bg-slate-950 text-slate-300 border-slate-800'
@@ -799,11 +929,11 @@ export default function App() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => setTheme('day')}
-                className={`min-h-[46px] rounded-xl border font-bold text-xs flex items-center justify-center gap-2 ${
+                className={`min-h-[42px] rounded-xl border font-bold text-xs flex items-center justify-center gap-2 ${
                   theme === 'day'
                     ? 'bg-sky-400 text-slate-950 border-sky-300'
                     : 'bg-slate-950 text-slate-300 border-slate-800'
@@ -815,7 +945,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setTheme('night')}
-                className={`min-h-[46px] rounded-xl border font-bold text-xs flex items-center justify-center gap-2 ${
+                className={`min-h-[42px] rounded-xl border font-bold text-xs flex items-center justify-center gap-2 ${
                   theme === 'night'
                     ? 'bg-indigo-500 text-white border-indigo-400'
                     : 'bg-slate-950 text-slate-300 border-slate-800'
@@ -832,7 +962,7 @@ export default function App() {
                   key={preset}
                   type="button"
                   onClick={() => setDifficulty(preset)}
-                  className={`min-h-[46px] rounded-xl border font-bold text-xs capitalize ${
+                  className={`min-h-[40px] rounded-xl border font-bold text-xs capitalize ${
                     difficulty === preset
                       ? 'bg-amber-400 text-slate-950 border-amber-300'
                       : 'bg-slate-950 text-slate-300 border-slate-800'
@@ -846,7 +976,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => setIsMobileCustomizeOpen(false)}
-              className="w-full min-h-[48px] rounded-xl bg-[#73BF2E] text-white font-display font-black text-base"
+              className="w-full min-h-[46px] rounded-xl bg-[#73BF2E] text-white font-display font-black text-sm"
             >
               Done & Resume
             </button>

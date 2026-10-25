@@ -1,23 +1,30 @@
-import { CUSTOM_JUMP_AUDIO_URL } from '../types/game';
+import { VOICE_AUDIOS, VoiceAudioId } from '../types/game';
+
+interface AudioBufferEntry {
+  buffer: AudioBuffer;
+  trimStart: number;
+  trimDuration: number;
+}
 
 class SoundEngine {
   private ctx: AudioContext | null = null;
-  private jumpBuffer: AudioBuffer | null = null;
-  private trimStart: number = 0;
-  private trimDuration: number = 0;
+  private currentAudioId: VoiceAudioId = 'saad_1';
+  private buffers: Partial<Record<VoiceAudioId, AudioBufferEntry>> = {};
+  private fallbackAudios: Partial<Record<VoiceAudioId, HTMLAudioElement>> = {};
   private playbackRate: number = 1.0;
   private activeJumpSource: AudioBufferSourceNode | null = null;
-  private fallbackAudio: HTMLAudioElement | null = null;
   private isMuted: boolean = false;
   private isLoaded: boolean = false;
-  private isLoading: boolean = false;
+  private isPreloading: boolean = false;
 
   constructor() {
     if (typeof window !== 'undefined') {
-      this.fallbackAudio = new Audio(CUSTOM_JUMP_AUDIO_URL);
-      this.fallbackAudio.preload = 'auto';
-      // Ensure natural pitch when sped up on HTMLAudioElement
-      this.applyPreservesPitch(this.fallbackAudio);
+      (Object.keys(VOICE_AUDIOS) as VoiceAudioId[]).forEach((id) => {
+        const audio = new Audio(VOICE_AUDIOS[id].url);
+        audio.preload = 'auto';
+        this.applyPreservesPitch(audio);
+        this.fallbackAudios[id] = audio;
+      });
     }
   }
 
@@ -32,12 +39,26 @@ class SoundEngine {
     if ('webkitPreservesPitch' in anyAudio) anyAudio.webkitPreservesPitch = true;
   }
 
+  public setVoiceAudio(id: VoiceAudioId): void {
+    this.currentAudioId = id;
+    this.stopActiveJumpAudio();
+    if (this.ctx && !this.buffers[id]) {
+      void this.loadAudioClip(id);
+    }
+  }
+
+  public getVoiceAudio(): VoiceAudioId {
+    return this.currentAudioId;
+  }
+
   public setPlaybackRate(rate: number): void {
     this.playbackRate = Math.min(Math.max(rate, 1.0), 2.5);
-    if (this.fallbackAudio) {
-      this.fallbackAudio.playbackRate = this.playbackRate;
-      this.applyPreservesPitch(this.fallbackAudio);
-    }
+    Object.values(this.fallbackAudios).forEach((audio) => {
+      if (audio) {
+        audio.playbackRate = this.playbackRate;
+        this.applyPreservesPitch(audio);
+      }
+    });
   }
 
   public getPlaybackRate(): number {
@@ -48,11 +69,11 @@ class SoundEngine {
    * Detects leading and trailing silence in the decoded AudioBuffer so the voice
    * starts on the exact millisecond of tap and finishes without dead air.
    */
-  private computeTrimBounds(buffer: AudioBuffer): void {
+  private computeTrimBounds(buffer: AudioBuffer): { start: number; duration: number } {
     const channelData = buffer.getChannelData(0);
     const sampleRate = buffer.sampleRate;
     const len = channelData.length;
-    const threshold = 0.018; // Amplitude threshold for active speech
+    const threshold = 0.015; // Amplitude threshold for active speech
 
     let firstSample = 0;
     while (firstSample < len && Math.abs(channelData[firstSample]) < threshold) {
@@ -64,17 +85,37 @@ class SoundEngine {
       lastSample--;
     }
 
-    // Leave a tiny 15ms safety margin around the voice
-    const marginSamples = Math.floor(sampleRate * 0.015);
+    const marginSamples = Math.floor(sampleRate * 0.012);
     const startSample = Math.max(0, firstSample - marginSamples);
     const endSample = Math.min(len, lastSample + marginSamples);
 
     if (endSample > startSample) {
-      this.trimStart = startSample / sampleRate;
-      this.trimDuration = (endSample - startSample) / sampleRate;
-    } else {
-      this.trimStart = 0;
-      this.trimDuration = buffer.duration;
+      return {
+        start: startSample / sampleRate,
+        duration: (endSample - startSample) / sampleRate,
+      };
+    }
+    return {
+      start: 0,
+      duration: buffer.duration,
+    };
+  }
+
+  private async loadAudioClip(id: VoiceAudioId): Promise<void> {
+    if (!this.ctx) return;
+    try {
+      const url = VOICE_AUDIOS[id].url;
+      const response = await fetch(url);
+      const arrayBuffer = await response.arrayBuffer();
+      const decodedBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+      const trim = this.computeTrimBounds(decodedBuffer);
+      this.buffers[id] = {
+        buffer: decodedBuffer,
+        trimStart: trim.start,
+        trimDuration: trim.duration,
+      };
+    } catch {
+      // Fallback HTMLAudioElement will handle playback
     }
   }
 
@@ -98,18 +139,16 @@ class SoundEngine {
       }
     }
 
-    if (!this.isLoaded && !this.isLoading && this.ctx) {
-      this.isLoading = true;
+    if (!this.isLoaded && !this.isPreloading && this.ctx) {
+      this.isPreloading = true;
       try {
-        const response = await fetch(CUSTOM_JUMP_AUDIO_URL);
-        const arrayBuffer = await response.arrayBuffer();
-        this.jumpBuffer = await this.ctx.decodeAudioData(arrayBuffer);
-        this.computeTrimBounds(this.jumpBuffer);
+        // Preload all voice clips in parallel
+        await Promise.all(
+          (Object.keys(VOICE_AUDIOS) as VoiceAudioId[]).map((id) => this.loadAudioClip(id))
+        );
         this.isLoaded = true;
-      } catch {
-        // Fallback HTMLAudioElement will handle playback if decode fails
       } finally {
-        this.isLoading = false;
+        this.isPreloading = false;
       }
     }
   }
@@ -135,10 +174,11 @@ class SoundEngine {
       }
       this.activeJumpSource = null;
     }
-    if (this.fallbackAudio) {
+    const currentFallback = this.fallbackAudios[this.currentAudioId];
+    if (currentFallback) {
       try {
-        this.fallbackAudio.pause();
-        this.fallbackAudio.currentTime = this.trimStart || 0;
+        currentFallback.pause();
+        currentFallback.currentTime = 0;
       } catch {
         // Ignore
       }
@@ -146,8 +186,7 @@ class SoundEngine {
   }
 
   /**
-   * Immediately restarts and plays the user's custom jump audio clip at accelerated speed
-   * with trimmed leading/trailing silence so the full voice word completes before the next jump!
+   * Immediately restarts and plays the selected custom voice audio clip (khizu, saad 1, or saad 2)
    */
   public playJumpSound(): void {
     if (this.isMuted) return;
@@ -160,12 +199,11 @@ class SoundEngine {
 
     this.stopActiveJumpAudio();
 
-    // Primary playback via pitch-preserved accelerated HTMLAudioElement or Web Audio Buffer
-    // Note: Web Audio BufferSource playbackRate is ultra-low-latency on mobile & desktop
-    if (this.ctx && this.jumpBuffer) {
+    const entry = this.buffers[this.currentAudioId];
+    if (this.ctx && entry) {
       try {
         const source = this.ctx.createBufferSource();
-        source.buffer = this.jumpBuffer;
+        source.buffer = entry.buffer;
         source.playbackRate.value = this.playbackRate;
 
         const gainNode = this.ctx.createGain();
@@ -174,8 +212,8 @@ class SoundEngine {
         source.connect(gainNode);
         gainNode.connect(this.ctx.destination);
 
-        const startOffset = this.trimStart;
-        const duration = this.trimDuration > 0 ? this.trimDuration : this.jumpBuffer.duration;
+        const startOffset = entry.trimStart;
+        const duration = entry.trimDuration > 0 ? entry.trimDuration : entry.buffer.duration;
 
         source.start(0, startOffset, duration);
         this.activeJumpSource = source;
@@ -190,15 +228,16 @@ class SoundEngine {
       }
     }
 
-    if (this.fallbackAudio) {
+    const fallback = this.fallbackAudios[this.currentAudioId];
+    if (fallback) {
       try {
-        this.fallbackAudio.playbackRate = this.playbackRate;
-        this.applyPreservesPitch(this.fallbackAudio);
-        this.fallbackAudio.currentTime = this.trimStart || 0;
-        const playPromise = this.fallbackAudio.play();
+        fallback.playbackRate = this.playbackRate;
+        this.applyPreservesPitch(fallback);
+        fallback.currentTime = entry?.trimStart || 0;
+        const playPromise = fallback.play();
         if (playPromise !== undefined) {
           playPromise.catch(() => {
-            // Ignore autoplay restriction errors
+            // Ignore autoplay errors
           });
         }
       } catch {
