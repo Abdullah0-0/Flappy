@@ -36,6 +36,7 @@ const STORAGE_KEYS = {
 };
 
 const VOICE_SPEED_OPTIONS = [
+  { rate: 1.0, label: '1.0x Normal' },
   { rate: 1.35, label: '1.35x Fast' },
   { rate: 1.65, label: '1.65x Snappy' },
   { rate: 2.0, label: '2.0x Ultra' },
@@ -213,38 +214,37 @@ export default function App() {
           Flappy Legend Arcade
         </a>
 
-        <nav className="flex items-center gap-6 text-sm font-medium text-slate-400">
-          <button
-            type="button"
-            onClick={() => handleSelectCharacter('rose_crown')}
-            className={`hover:text-white transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-              characterId === 'rose_crown' ? 'text-amber-400 underline underline-offset-4' : ''
-            }`}
-          >
-            Rose Crown Flyer
-          </button>
-          <button
-            type="button"
-            onClick={() => handleSelectCharacter('side_profile')}
-            className={`hover:text-white transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-              characterId === 'side_profile' ? 'text-amber-400 underline underline-offset-4' : ''
-            }`}
-          >
-            Side Profile Flyer
-          </button>
+        <nav className="flex items-center gap-4 text-xs font-semibold text-slate-400">
+          {(Object.keys(CHARACTERS) as CharacterId[]).map((id) => {
+            const char = CHARACTERS[id];
+            const isSelected = characterId === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => handleSelectCharacter(id)}
+                className={`hover:text-white transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                  isSelected ? 'text-amber-400 underline underline-offset-4' : ''
+                }`}
+              >
+                {char.name}
+              </button>
+            );
+          })}
+          <span className="text-slate-600">|</span>
           <button
             type="button"
             onClick={() => setTheme(theme === 'day' ? 'night' : 'day')}
             className="hover:text-white transition-colors whitespace-nowrap shrink-0 cursor-pointer"
           >
-            {theme === 'day' ? 'Switch to Night Sky' : 'Switch to Daylight Sky'}
+            {theme === 'day' ? 'Night Sky' : 'Day Sky'}
           </button>
           <button
             type="button"
             onClick={handleTestJumpAudio}
-            className="hover:text-white transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            className="hover:text-white transition-colors whitespace-nowrap shrink-0 cursor-pointer text-amber-300"
           >
-            Test Jump Voice ({voiceSpeed}x)
+            Voice ({voiceSpeed}x)
           </button>
         </nav>
 
@@ -781,7 +781,7 @@ export default function App() {
                 <Zap className="w-3.5 h-3.5 text-amber-400" />
                 <span>Jump Voice Speed</span>
               </div>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-4 gap-1.5">
                 {VOICE_SPEED_OPTIONS.map((opt) => (
                   <button
                     key={opt.rate}

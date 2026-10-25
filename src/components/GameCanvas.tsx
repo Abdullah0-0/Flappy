@@ -114,10 +114,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   }, [gameState]);
 
   const spawnJumpParticles = (x: number, y: number) => {
-    const colors =
-      characterId === 'rose_crown'
-        ? ['#E11D48', '#FB7185', '#FFFFFF', '#FDE047']
-        : ['#38BDF8', '#FFFFFF', '#F59E0B', '#E2E8F0'];
+    let colors = ['#38BDF8', '#FFFFFF', '#F59E0B', '#E2E8F0'];
+    if (characterId === 'rose_crown') {
+      colors = ['#E11D48', '#FB7185', '#FFFFFF', '#FDE047'];
+    } else if (characterId === 'glasses_side') {
+      colors = ['#818CF8', '#C084FC', '#FFFFFF', '#38BDF8'];
+    } else if (characterId === 'classic_portrait') {
+      colors = ['#F59E0B', '#FBBF24', '#FFFFFF', '#34D399'];
+    }
 
     for (let i = 0; i < 9; i++) {
       const angle = Math.PI * 0.65 + (Math.random() - 0.5) * 1.3;

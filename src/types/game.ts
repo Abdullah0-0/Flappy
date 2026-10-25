@@ -1,6 +1,6 @@
 export type GameState = 'TITLE_MENU' | 'READY' | 'PLAYING' | 'DYING' | 'GAME_OVER';
 
-export type CharacterId = 'rose_crown' | 'side_profile';
+export type CharacterId = 'rose_crown' | 'side_profile' | 'glasses_side' | 'classic_portrait';
 
 export type ThemeMode = 'day' | 'night';
 
@@ -41,16 +41,30 @@ export const CHARACTERS: Record<CharacterId, CharacterOption> = {
   rose_crown: {
     id: 'rose_crown',
     name: 'Rose Crown Legend',
-    tagline: 'Front portrait with triple red roses & navy kurta',
+    tagline: 'Triple red roses & navy kurta',
     imageUrl: '/assets/aistudio/WhatsApp_Image_2026-10-20_at_9.03.49_PM_7522bded.jpeg',
     aspectRatio: 1,
   },
   side_profile: {
     id: 'side_profile',
     name: 'Aero Side Profile',
-    tagline: 'Aerodynamic side-look fade & black collar',
+    tagline: 'Aerodynamic side fade silhouette',
     imageUrl: '/assets/aistudio/Screenshot_2026-10-20_232616_f1543745.jpg',
     aspectRatio: 1.15,
+  },
+  glasses_side: {
+    id: 'glasses_side',
+    name: 'Spectacle Aviator',
+    tagline: 'Black-frame glasses cutout look',
+    imageUrl: '/assets/aistudio/WhatsApp_Image_2026-10-23_at_11.40.41_PM-removebg-preview_483f029d.png',
+    aspectRatio: 0.85,
+  },
+  classic_portrait: {
+    id: 'classic_portrait',
+    name: 'Cafe Aviator',
+    tagline: 'Casual cafe portrait badge',
+    imageUrl: '/assets/aistudio/WhatsApp_Image_2026-10-23_at_11.38.00_PM_bb46b673.jpeg',
+    aspectRatio: 1,
   },
 };
 
@@ -87,7 +101,8 @@ export const DIFFICULTIES: Record<DifficultyPreset, DifficultyConfig> = {
   },
 };
 
-export const CUSTOM_JUMP_AUDIO_URL = '/assets/aistudio/aud_1_4b4e40cd.ogg';
+// Completely replaced old aud_1 audio with the new aud_2 laugh audio clip
+export const CUSTOM_JUMP_AUDIO_URL = '/assets/aistudio/aud_2_4338bced.ogg';
 
 export function getMedalForScore(score: number): MedalType {
   if (score >= 40) return 'platinum';

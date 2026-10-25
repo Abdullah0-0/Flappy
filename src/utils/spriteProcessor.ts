@@ -1,7 +1,7 @@
 /**
- * Processes an uploaded sticker-style JPEG image by flood-filling from the outer edges
- * to strip the solid white outer background while preserving the crisp white sticker outline
- * and interior details of the character portrait.
+ * Processes an uploaded character image:
+ * - If already a transparent PNG, preserves transparency or creates a circular/sticker token if needed.
+ * - If a JPEG with white or solid framing, strips outer border / background cleanly.
  */
 export async function createStickerCutoutSprite(imageUrl: string): Promise<HTMLCanvasElement> {
   return new Promise((resolve, reject) => {
@@ -26,24 +26,86 @@ export async function createStickerCutoutSprite(imageUrl: string): Promise<HTMLC
 
       ctx.drawImage(img, 0, 0, width, height);
 
+      // If the image is already a transparent PNG (like removebg-preview), test if it already has transparent pixels
       try {
         const imageData = ctx.getImageData(0, 0, width, height);
         const data = imageData.data;
+        let hasAlpha = false;
+        for (let i = 3; i < data.length; i += 16) {
+          if (data[i] < 200) {
+            hasAlpha = true;
+            break;
+          }
+        }
+
+        // If it's already cleanly transparent, we can use it directly!
+        if (hasAlpha) {
+          resolve(canvas);
+          return;
+        }
+
+        // Check if the image has a full scene background (like a cafe/indoor photo)
+        // by comparing corner colors:
+        const corners = [
+          [0, 0],
+          [width - 1, 0],
+          [0, height - 1],
+          [width - 1, height - 1],
+        ];
+        let whiteCorners = 0;
+        corners.forEach(([cx, cy]) => {
+          const idx = (cy * width + cx) * 4;
+          if (data[idx] > 230 && data[idx + 1] > 230 && data[idx + 2] > 230) {
+            whiteCorners++;
+          }
+        });
+
+        // If it's a solid/photo background (like the cafe photo), clip into a stylish circular sticker badge with a white border
+        if (whiteCorners < 3) {
+          const badgeCanvas = document.createElement('canvas');
+          badgeCanvas.width = width;
+          badgeCanvas.height = height;
+          const bCtx = badgeCanvas.getContext('2d')!;
+
+          const radius = Math.min(width, height) / 2 - 4;
+          const centerX = width / 2;
+          const centerY = height / 2;
+
+          bCtx.save();
+          bCtx.beginPath();
+          bCtx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+          bCtx.clip();
+          bCtx.drawImage(canvas, 0, 0);
+          bCtx.restore();
+
+          // Crisp white border + dark rim
+          bCtx.beginPath();
+          bCtx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+          bCtx.lineWidth = 6;
+          bCtx.strokeStyle = '#FFFFFF';
+          bCtx.stroke();
+
+          bCtx.beginPath();
+          bCtx.arc(centerX, centerY, radius + 1, 0, Math.PI * 2);
+          bCtx.lineWidth = 2;
+          bCtx.strokeStyle = '#2B1D24';
+          bCtx.stroke();
+
+          resolve(badgeCanvas);
+          return;
+        }
+
+        // Otherwise it has white outer background: flood-fill to strip the outer white
         const visited = new Uint8Array(width * height);
         const queue = new Int32Array(width * height);
         let head = 0;
         let tail = 0;
 
-        // Check if pixel at (x, y) is near-white outer background
-        // Notice: Both uploaded photos have a thin grey outer sticker stroke (~200-235 luminance)
-        // surrounding the white sticker border, surrounded by pure white (250-255) outside.
-        // Flood-filling pixels with R,G,B >= 244 from the perimeter cleanly removes only the
-        // exterior white background up to the grey sticker outline!
         const isExteriorWhite = (idx: number): boolean => {
           const r = data[idx];
           const g = data[idx + 1];
           const b = data[idx + 2];
-          return r >= 242 && g >= 242 && b >= 242;
+          return r >= 238 && g >= 238 && b >= 238;
         };
 
         const enqueueIfValid = (x: number, y: number) => {
@@ -57,7 +119,6 @@ export async function createStickerCutoutSprite(imageUrl: string): Promise<HTMLC
           }
         };
 
-        // Seed flood-fill along all 4 image edges
         for (let x = 0; x < width; x++) {
           enqueueIfValid(x, 0);
           enqueueIfValid(x, height - 1);
@@ -67,11 +128,10 @@ export async function createStickerCutoutSprite(imageUrl: string): Promise<HTMLC
           enqueueIfValid(width - 1, y);
         }
 
-        // BFS flood fill from exterior corners/edges
         while (head < tail) {
           const pos = queue[head++];
           const rgbaIdx = pos * 4;
-          data[rgbaIdx + 3] = 0; // Make exterior background transparent
+          data[rgbaIdx + 3] = 0;
 
           const x = pos % width;
           const y = (pos - x) / width;
@@ -82,7 +142,6 @@ export async function createStickerCutoutSprite(imageUrl: string): Promise<HTMLC
           enqueueIfValid(x, y - 1);
         }
 
-        // Soften 1px fringe along the flood-filled boundary for anti-aliased rendering
         for (let y = 1; y < height - 1; y++) {
           for (let x = 1; x < width - 1; x++) {
             const pos = y * width + x;
@@ -94,11 +153,8 @@ export async function createStickerCutoutSprite(imageUrl: string): Promise<HTMLC
                 visited[pos + width];
               if (hasTransparentNeighbor) {
                 const rgbaIdx = pos * 4;
-                const r = data[rgbaIdx];
-                const g = data[rgbaIdx + 1];
-                const b = data[rgbaIdx + 2];
-                if (r > 235 && g > 235 && b > 235) {
-                  data[rgbaIdx + 3] = 150;
+                if (data[rgbaIdx] > 235 && data[rgbaIdx + 1] > 235 && data[rgbaIdx + 2] > 235) {
+                  data[rgbaIdx + 3] = 140;
                 }
               }
             }
@@ -107,7 +163,7 @@ export async function createStickerCutoutSprite(imageUrl: string): Promise<HTMLC
 
         ctx.putImageData(imageData, 0, 0);
       } catch {
-        // If getImageData fails for any reason, keep the drawn image intact
+        // Fallback
       }
 
       resolve(canvas);
