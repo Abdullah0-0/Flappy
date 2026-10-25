@@ -60,7 +60,7 @@ export default function App() {
   const [voiceSpeed, setVoiceSpeed] = useState<number>(() => {
     const saved = Number(localStorage.getItem(STORAGE_KEYS.VOICE_SPEED));
     if (saved && saved >= 1.0 && saved <= 2.5) return saved;
-    return 1.65;
+    return 1.0;
   });
 
   const [score, setScore] = useState<number>(0);

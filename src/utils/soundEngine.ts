@@ -5,7 +5,7 @@ class SoundEngine {
   private jumpBuffer: AudioBuffer | null = null;
   private trimStart: number = 0;
   private trimDuration: number = 0;
-  private playbackRate: number = 1.65;
+  private playbackRate: number = 1.0;
   private activeJumpSource: AudioBufferSourceNode | null = null;
   private fallbackAudio: HTMLAudioElement | null = null;
   private isMuted: boolean = false;
