@@ -1,0 +1,6 @@
+{
+  "name": "Flappy Legend Custom Arcade",
+  "description": "Authentic Flappy Bird arcade game featuring custom sticker-style character photos, instant-restart custom jump voice audio, day/night themes, and difficulty presets.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
